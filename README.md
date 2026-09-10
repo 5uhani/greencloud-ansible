@@ -1,96 +1,111 @@
-# AGCP — Baseline Automation
+# Baseline Automation — Ansible Instance Bootstrapping & Configuration Management
 
-**"Create initial Ansible playbooks for instance bootstrapping and configuration management."**
+Ansible automation that takes a bare Linux instance and brings it to a fully configured, production-ready baseline: system updates, hardened firewall rules, a monitoring agent, and a container runtime — applied consistently and repeatably across any number of servers.
 
-## What's in here
+## Overview
+
+Manually configuring servers one at a time doesn't scale and isn't repeatable. This project defines the target state of an instance as code (a set of Ansible playbooks and roles) so that any server — local, staging, or production — can be brought to the same known-good configuration with a single command.
+
+```mermaid
+flowchart LR
+    A[Bare instance] --> B[ansible-playbook site.yml]
+    B --> C[common role]
+    C --> D[security role]
+    D --> E[node_exporter role]
+    E --> F{App or DB server?}
+    F -->|Yes| G[docker role]
+    F -->|No| H[Fully configured instance]
+    G --> H
+```
+
+## What it configures
+
+| Role | Responsibility |
+|---|---|
+| `common` | OS package updates, base utilities, non-root deploy user, timezone and clock sync |
+| `security` | Firewall rules (UFW) restricted to required ports, SSH hardening (no root login, no password auth) |
+| `node_exporter` | Installs Prometheus Node Exporter as a systemd service, exposing host metrics for scraping |
+| `docker` | Installs Docker Engine and the Compose plugin on application and database hosts |
+
+Each role is idempotent — running the playbook repeatedly converges the instance to the same state rather than accumulating changes.
+
+## Repository structure
 
 ```
-agcp-ansible/
-├── ansible.cfg              # Ansible settings (points to inventory)
-├── site.yml                 # Main playbook — run this
+.
+├── ansible.cfg              # Ansible runtime configuration
+├── site.yml                 # Entry-point playbook
+├── Vagrantfile              # Local test VM definition
 ├── inventory/
-│   └── hosts.ini            # List of target machines (edit this)
+│   ├── hosts.ini             # Target hosts (edit for real deployments)
+│   └── hosts_local.ini       # Inventory used by the local Vagrant test VM
 ├── group_vars/
-│   └── all.yml               # Shared variables (versions, packages)
+│   └── all.yml               # Shared variables (versions, package lists)
 └── roles/
-    ├── common/               # OS updates, base packages, users, timezone
-    ├── security/             # Firewall (ufw) + SSH hardening
-    ├── node_exporter/        # Installs Prometheus Node Exporter
-    └── docker/                # Installs Docker + Compose (app/db servers only)
+    ├── common/
+    ├── security/
+    ├── node_exporter/
+    └── docker/
 ```
 
-**What each role actually does, in plain English:**
-- **common** = the "bootstrapping" part. Updates the OS, installs basic tools (curl, git, pip, etc.), creates a non-root deploy user, sets timezone/clock sync.
-- **security** = basic "configuration management." Opens only the ports you need (SSH, HTTP, FastAPI port, Node Exporter port) and turns off risky SSH defaults.
-- **node_exporter** = installs the agent that exposes CPU/RAM/disk metrics, so Member 1's Prometheus server has something to scrape on every machine.
-- **docker** = installs Docker only on app/db servers, so Member 3's FastAPI app and Member 4's Postgres/Redis can just run as containers later.
+## Prerequisites
 
+- [Ansible](https://docs.ansible.com/) ≥ 2.15 (control node — Linux/macOS, or WSL on Windows)
+- Target hosts running Ubuntu 22.04 (or compatible)
+- SSH key-based access to target hosts, for real deployments
+- [VirtualBox](https://www.virtualbox.org/) and [Vagrant](https://developer.hashicorp.com/vagrant/) for local testing (optional but recommended)
 
-### Option A — Test locally with Vagrant (recommended, free, no cloud account needed)
+## Usage
 
-The `Vagrantfile` and `inventory/hosts.ini` in this folder are already set up to work together — no editing required for your first test run.
+### Local testing (no cloud account required)
 
-1. Install [VirtualBox](https://www.virtualbox.org/) and [Vagrant](https://developer.hashicorp.com/vagrant/downloads).
-2. From inside the `agcp-ansible/` folder, run:
-   ```bash
-   vagrant up
-   ```
-   Wait a few minutes — this downloads and boots a small Ubuntu virtual machine on your laptop.
-3. Install Ansible on your own laptop (not the VM):
-   ```bash
-   pip install ansible
-   # or on Mac: brew install ansible
-   ```
-4. Still inside `agcp-ansible/`, run:
-   ```bash
-   ansible-playbook site.yml
-   ```
-5. Confirm it worked:
-   ```bash
-   vagrant ssh
-   curl localhost:9100/metrics   # should print a wall of metrics
-   docker --version              # should print a version number
-   exit
-   ```
+The included `Vagrantfile` provisions a local VM and runs the playbook against it automatically — useful for validating changes before targeting real infrastructure.
 
-### Option B — Point directly at real cloud instances (once Terraform is up)
+```bash
+vagrant up          # boots the VM, installs Ansible inside it, and runs the playbook
+vagrant ssh          # log in to inspect the result
+exit
+```
 
-1. Get the IPs from Member 2:
-   ```bash
-   terraform output -json
-   ```
-2. Paste those IPs into `inventory/hosts.ini` under the right group (`app_servers`, `db_servers`, `monitoring_servers`).
-3. Update `ansible_ssh_private_key_file` to your actual `.pem` key.
-4. Test connectivity first:
+Verify the outcome from inside the VM:
+
+```bash
+curl localhost:9100/metrics   # Node Exporter is serving metrics
+docker --version              # Docker installed
+sudo ufw status                 # firewall rules applied
+```
+
+### Running against real infrastructure
+
+```mermaid
+flowchart TD
+    A[Provision instances<br/>e.g. via Terraform] --> B[Get instance IP addresses]
+    B --> C[Update inventory/hosts.ini<br/>with real IPs + SSH key path]
+    C --> D[ansible all_nodes -m ping]
+    D --> E{Connectivity OK?}
+    E -->|No| C
+    E -->|Yes| F[ansible-playbook site.yml]
+    F --> G[Instances fully configured]
+```
+
+1. Update `inventory/hosts.ini` with the target IP addresses, SSH user, and private key path.
+2. Verify connectivity:
    ```bash
    ansible all_nodes -m ping
    ```
-5. Then run the real thing:
+3. Run the playbook:
    ```bash
    ansible-playbook site.yml
    ```
 
-## Install Ansible itself (control machine only — not the target servers)
+## Design notes
 
-```bash
-# macOS
-brew install ansible
+- **Declarative, not scripted.** Roles describe the desired end state; Ansible determines the steps to reach it. This keeps the automation predictable and safe to re-run.
+- **Local-first validation.** Every role is exercised against a disposable local VM before ever touching real infrastructure, avoiding cost and risk during development.
+- **Separation of concerns.** This project is scoped to instance-level bootstrapping and configuration. Infrastructure provisioning (creating the instances themselves) is treated as a separate, upstream concern — this playbook is agnostic to where an instance came from, as long as it's reachable over SSH.
 
-# Ubuntu/Debian (WSL is fine)
-sudo apt update && sudo apt install -y ansible
+## Roadmap
 
-# Or via pip, anywhere
-pip install ansible
-```
-
-You do NOT install Ansible on the target instances — it connects over SSH and runs everything remotely. That's the whole point of it.
-
-## For the paper section (Member 5 also owns this for Review 1)
-
-Your "Baseline Automation" technical work pairs with a separate deliverable: the **initial Mathematical Optimization Model** (cost vs. carbon vs. latency objective functions) for the paper. That's a different, math-focused task — happy to help you draft that too if you want, it's a separate piece of work from these playbooks.
-
-## Quick talking points for your review
-
-- "Bootstrapping" = common role (updates, packages, users).
-- "Configuration management" = security role (firewall/SSH) + node_exporter/docker roles that configure services consistently across every instance, which is the core idea of Ansible (idempotent, repeatable config vs. manual setup).
-- This is "initial" on purpose — Review 2 asks you to extend it to instance resizing, remediation, and rollback policies, which builds directly on top of this file structure (you'll just add new roles like `remediation/` and reuse `site.yml`).
+- Automated remediation and rollback on configuration drift
+- Support for dynamic inventory (auto-discovering instances from a cloud provider)
+- Role for horizontal scaling / instance resizing triggers
