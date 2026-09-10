@@ -1,0 +1,56 @@
+---
+# ------------------------------------------------------------------
+# ROLE: node_exporter
+# Purpose: install Prometheus Node Exporter as a systemd service on
+# every instance so Member 1's Prometheus server can scrape compute
+# telemetry (CPU, memory, disk, network) from them.
+# ------------------------------------------------------------------
+
+- name: Download Node Exporter tarball
+  get_url:
+    url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/node_exporter.tar.gz"
+
+- name: Extract Node Exporter
+  unarchive:
+    src: "/tmp/node_exporter.tar.gz"
+    dest: "/tmp/"
+    remote_src: yes
+
+- name: Copy node_exporter binary to /usr/local/bin
+  copy:
+    src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+    dest: "/usr/local/bin/node_exporter"
+    mode: '0755'
+    remote_src: yes
+
+- name: Create dedicated node_exporter system user
+  user:
+    name: node_exporter
+    system: yes
+    shell: /usr/sbin/nologin
+    create_home: no
+
+- name: Create systemd service file for Node Exporter
+  copy:
+    dest: /etc/systemd/system/node_exporter.service
+    content: |
+      [Unit]
+      Description=Prometheus Node Exporter
+      After=network.target
+
+      [Service]
+      User=node_exporter
+      Group=node_exporter
+      Type=simple
+      ExecStart=/usr/local/bin/node_exporter --web.listen-address=:{{ node_exporter_port }}
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Reload systemd, enable and start node_exporter
+  systemd:
+    daemon_reload: yes
+    name: node_exporter
+    enabled: yes
+    state: started

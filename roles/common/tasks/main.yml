@@ -1,0 +1,48 @@
+---
+# ------------------------------------------------------------------
+# ROLE: common
+# Purpose: baseline bootstrapping that every instance needs,
+# regardless of whether it's an app server, DB server, or
+# monitoring server. This is the "instance bootstrapping" part
+# of Member 5's task.
+# ------------------------------------------------------------------
+
+- name: Update apt package cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Upgrade all packages to the latest version
+  apt:
+    upgrade: dist
+
+- name: Install baseline packages
+  apt:
+    name: "{{ base_packages }}"
+    state: present
+
+- name: Create a non-root deploy user
+  user:
+    name: deployer
+    groups: sudo
+    shell: /bin/bash
+    create_home: yes
+
+- name: Set hostname to inventory name
+  hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Set timezone to UTC
+  timezone:
+    name: UTC
+
+- name: Ensure NTP time sync service is installed and running
+  apt:
+    name: chrony
+    state: present
+
+- name: Enable and start chrony
+  systemd:
+    name: chrony
+    enabled: yes
+    state: started

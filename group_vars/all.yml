@@ -1,0 +1,14 @@
+---
+# Shared variables used across all roles.
+
+node_exporter_version: "1.8.2"
+node_exporter_port: 9100
+
+base_packages:
+  - curl
+  - git
+  - htop
+  - unzip
+  - python3-pip
+  - net-tools
+  - ufw

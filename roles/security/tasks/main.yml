@@ -1,0 +1,48 @@
+---
+# ------------------------------------------------------------------
+# ROLE: security
+# Purpose: minimal, sane defaults so instances aren't wide open.
+# Keeps "configuration management" scope realistic for a capstone
+# without over-engineering it.
+# ------------------------------------------------------------------
+
+- name: Allow SSH through the firewall
+  ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Allow Node Exporter port (Prometheus scraping)
+  ufw:
+    rule: allow
+    port: "{{ node_exporter_port }}"
+    proto: tcp
+
+- name: Allow app-facing HTTP/HTTPS
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - "80"
+    - "443"
+    - "8000"   # FastAPI default dev port, adjust to match Member 3's setup
+
+- name: Enable UFW firewall
+  ufw:
+    state: enabled
+    policy: deny
+
+- name: Disable SSH password authentication (key-based only)
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+  notify: Restart sshd
+
+- name: Disable direct root SSH login
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitRootLogin'
+    line: 'PermitRootLogin no'
+  notify: Restart sshd

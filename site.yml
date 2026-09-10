@@ -1,0 +1,29 @@
+---
+# ==================================================================
+# AGCP - Baseline Automation Playbook (Member 5, Phase 1 / Review 1)
+#
+# What this does:
+#   1. Bootstraps EVERY instance (updates, base packages, users,
+#      timezone, basic firewall + SSH hardening).
+#   2. Installs Node Exporter on every instance so Prometheus
+#      (Member 1) can collect telemetry from them.
+#   3. Installs Docker on app_servers and db_servers so the FastAPI
+#      backend (Member 3) and PostgreSQL/Redis (Member 4) can run
+#      as containers.
+#
+# Run with:  ansible-playbook site.yml
+# ==================================================================
+
+- name: Bootstrap and secure all instances
+  hosts: all_nodes
+  become: yes
+  roles:
+    - common
+    - security
+    - node_exporter
+
+- name: Install Docker on application and database servers
+  hosts: app_servers:db_servers
+  become: yes
+  roles:
+    - docker
