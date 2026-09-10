@@ -1,4 +1,4 @@
-# Baseline Automation — Ansible Instance Bootstrapping & Configuration Management
+# Baseline Automation - Ansible Instance Bootstrapping & Configuration Management
 
 Ansible automation that takes a bare Linux instance and brings it to a fully configured, production-ready baseline: system updates, hardened firewall rules, a monitoring agent, and a container runtime — applied consistently and repeatably across any number of servers.
 
