@@ -1,6 +1,5 @@
-# AGCP — Baseline Automation (Member 5)
+# AGCP — Baseline Automation
 
-This covers your Phase 1 / Review 1 technical task:
 **"Create initial Ansible playbooks for instance bootstrapping and configuration management."**
 
 ## What's in here
@@ -26,11 +25,6 @@ agcp-ansible/
 - **node_exporter** = installs the agent that exposes CPU/RAM/disk metrics, so Member 1's Prometheus server has something to scrape on every machine.
 - **docker** = installs Docker only on app/db servers, so Member 3's FastAPI app and Member 4's Postgres/Redis can just run as containers later.
 
-You don't have to keep all four roles if your group wants to scope it down — `common` + `security` alone already satisfies "bootstrapping and configuration management." The other two just make the playbook obviously useful to the rest of the team, which is good for your presentation.
-
-## Easiest way to actually run and demo this
-
-You don't need real AWS/Azure servers to prove this works. Do it locally first, then point it at real cloud instances once Member 2's Terraform is ready.
 
 ### Option A — Test locally with Vagrant (recommended, free, no cloud account needed)
 
